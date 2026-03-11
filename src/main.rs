@@ -1,7 +1,7 @@
 pub mod protagonist;
 use protagonist::*;
 use bevy::prelude::*;
-use bevy::window::{CursorOptions, CursorGrabMode, PrimaryWindow};
+use bevy::window::{ CursorOptions, CursorGrabMode, PrimaryWindow };
 
 fn main() -> AppExit {
     App::new().add_plugins(DefaultPlugins).add_plugins(MainPlugin).run()
@@ -10,7 +10,12 @@ pub struct MainPlugin;
 impl Plugin for MainPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, setup);
-        app.add_systems(Update, (update_pos, update_input, lock_cursor));
+        app.add_systems(Update, (
+            update_pos,
+            update_input,
+            update_rotation_with_mouse,
+            lock_cursor,
+        ));
     }
 }
 
@@ -37,30 +42,30 @@ fn setup(
     cmds.spawn((
         Camera3d::default(),
         Transform::from_xyz(-10.0, 5.0, 0.0).looking_at(Vec3::ZERO, Vec3::Y),
-        Velocity { x: 0.0, y: 0.0, z: 0.0 },
-        Protagonist { paused: false },
+        Velocity(Vec3::ZERO),
+        Protagonist { paused: true },
+        CameraSensitivity(Vec2::new(0.002,0.002)),
     ));
 }
 fn update_pos(query: Query<(&Velocity, &mut Transform)>) {
     for (vel, mut pos) in query {
-        pos.translation.x += vel.x;
-        pos.translation.y += vel.y;
-        pos.translation.z += vel.z;
+        pos.translation += vel.0;
     }
 }
 fn lock_cursor(
-    mut window_query: Query<(&mut CursorOptions, &mut Protagonist), With<PrimaryWindow>>,
+    mut cursor_query: Query<&mut CursorOptions, With<PrimaryWindow>>,
+    mut protag_query: Query<&mut Protagonist>,
     keys: Res<ButtonInput<KeyCode>>
 ) {
-    if let Ok((mut cursor, mut protagonist)) = window_query.single_mut() {
-        if keys.just_pressed(KeyCode::Escape) {
-            protagonist.paused = !protagonist.paused;
-            cursor.visible = protagonist.paused;
-            if protagonist.paused {
-                cursor.grab_mode = CursorGrabMode::Locked;
-            } else {
-                cursor.grab_mode = CursorGrabMode::None;
-            }
+    if keys.just_pressed(KeyCode::Escape) {
+        let mut protagonist = protag_query.single_mut().unwrap();
+        let mut cursor = cursor_query.single_mut().unwrap();
+        protagonist.paused = !protagonist.paused;
+        cursor.visible = protagonist.paused;
+        if protagonist.paused {
+            cursor.grab_mode = CursorGrabMode::None;
+        } else {
+            cursor.grab_mode = CursorGrabMode::Locked;
         }
     }
 }
