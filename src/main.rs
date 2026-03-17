@@ -27,9 +27,14 @@ fn setup(
     println!("Hello World");
 
     cmds.spawn((
+        Mesh3d(meshes.add(Cuboid::new(20.0, 0.5, 20.0))),
+        MeshMaterial3d(materials.add(Color::srgb_u8(0, 255, 0))),
+        Transform::from_xyz(0.0, 0.0, 0.0)
+    ));
+    cmds.spawn((
         Mesh3d(meshes.add(Cuboid::new(1.0, 1.0, 1.0))),
         MeshMaterial3d(materials.add(Color::srgb_u8(255, 10, 0))),
-        Transform::from_xyz(0.0, 0.0, 0.0),
+        Transform::from_xyz(0.0, 1.0, 0.0),
     ));
 
     cmds.spawn((
