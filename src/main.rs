@@ -1,42 +1,35 @@
 pub mod protagonist;
-use protagonist::*;
+pub mod antagonist;
+use avian3d::prelude::*;
 use bevy::prelude::*;
-use bevy::window::{ CursorOptions, CursorGrabMode, PrimaryWindow };
+use protagonist::*;
+use antagonist::*;
 
 fn main() -> AppExit {
-    App::new().add_plugins(DefaultPlugins).add_plugins(MainPlugin).run()
+    App::new().add_plugins((DefaultPlugins, PhysicsPlugins::default(), MainPlugin)).run()
 }
 pub struct MainPlugin;
 impl Plugin for MainPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, setup);
+        // initialize
+        app.add_systems(Startup, build_world);
+        // player update
         app.add_systems(Update, (
-            update_pos,
             update_input,
             update_rotation_with_mouse,
+            update_spawn_enemy_input,
+            export_protagonist_info,
             lock_cursor,
+            update_antagonist,
         ));
     }
 }
 
-fn setup(
+fn build_world(
     mut cmds: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>
 ) {
-    println!("Hello World");
-
-    cmds.spawn((
-        Mesh3d(meshes.add(Cuboid::new(20.0, 0.5, 20.0))),
-        MeshMaterial3d(materials.add(Color::srgb_u8(0, 255, 0))),
-        Transform::from_xyz(0.0, 0.0, 0.0)
-    ));
-    cmds.spawn((
-        Mesh3d(meshes.add(Cuboid::new(1.0, 1.0, 1.0))),
-        MeshMaterial3d(materials.add(Color::srgb_u8(255, 10, 0))),
-        Transform::from_xyz(0.0, 1.0, 0.0),
-    ));
-
     cmds.spawn((
         PointLight {
             shadows_enabled: true,
@@ -44,33 +37,84 @@ fn setup(
         },
         Transform::from_xyz(0.0, 10.0, 0.0),
     ));
+    // ground2
+    cmds.spawn((
+        Mesh3d(meshes.add(Cuboid::new(50.0, 0.5, 50.0))),
+        MeshMaterial3d(materials.add(Color::srgb(0.3, 0.5, 0.3))),
+        Transform::from_xyz(0.0, -50.0, 0.0),
+        RigidBody::Static,
+        Collider::cuboid(50.0, 0.5, 50.0),
+    ));
+
+    // ground
+    cmds.spawn((
+        Mesh3d(meshes.add(Cuboid::new(50.0, 0.5, 50.0))),
+        MeshMaterial3d(materials.add(Color::srgb(0.3, 0.5, 0.3))),
+        Transform::from_xyz(0.0, -0.25, 0.0),
+        RigidBody::Static,
+        Collider::cuboid(50.0, 0.5, 50.0),
+    ));
+
+    for _ in 0..=67 {
+        // enemy cube
+        cmds.spawn((
+            Mesh3d(meshes.add(Sphere::new(1.0))),
+            MeshMaterial3d(materials.add(Color::srgb_u8(0, 0, 0))),
+            Transform::from_xyz(0.0, 3.0, 0.0),
+            RigidBody::Dynamic,
+            Collider::cuboid(1.0, 1.0, 1.0),
+            Antagonist { detecting: true, goto: Vec3 { x: -10.0, y: 5.0, z: 0.0 } },
+        ));
+    }
+
+    // players
     cmds.spawn((
         Camera3d::default(),
-        Transform::from_xyz(-10.0, 5.0, 0.0).looking_at(Vec3::ZERO, Vec3::Y),
-        Velocity(Vec3::ZERO),
-        Protagonist { paused: true },
-        CameraSensitivity(Vec2::new(0.002,0.002)),
+        Transform::from_xyz(0.0, 5.0, -10.0).looking_at(Vec3::ZERO, Vec3::Y),
+        Protagonist { paused: true, position: Vec3::ZERO },
+        CameraSensitivity(Vec2::new(0.002, 0.002)),
+        RigidBody::Dynamic,
+        LockedAxes::ROTATION_LOCKED,
+        Collider::capsule(0.3, 1.0),
+        children![
+            (
+                PointLight {
+                    shadows_enabled: true,
+                    ..default()
+                },
+            ),
+            (
+                Mesh3d(meshes.add(Cuboid::new(1.0, 1.0, 3.0))),
+                MeshMaterial3d(materials.add(Color::srgb_u8(0, 0, 255))),
+                Transform::from_xyz(0.5, 0.0, 3.0),
+            )
+        ],
     ));
 }
-fn update_pos(query: Query<(&Velocity, &mut Transform)>) {
-    for (vel, mut pos) in query {
-        pos.translation += vel.0;
+
+pub fn update_spawn_enemy_input(
+    keys: Res<ButtonInput<KeyCode>>,
+    cmds: Commands,
+    meshes: ResMut<Assets<Mesh>>,
+    materials: ResMut<Assets<StandardMaterial>>
+) {
+    if keys.pressed(KeyCode::KeyE) {
+        spawn_enemy(cmds, meshes, materials);
     }
 }
-fn lock_cursor(
-    mut cursor_query: Query<&mut CursorOptions, With<PrimaryWindow>>,
-    mut protag_query: Query<&mut Protagonist>,
-    keys: Res<ButtonInput<KeyCode>>
+
+pub fn spawn_enemy(
+    mut cmds: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>
 ) {
-    if keys.just_pressed(KeyCode::Escape) {
-        let mut protagonist = protag_query.single_mut().unwrap();
-        let mut cursor = cursor_query.single_mut().unwrap();
-        protagonist.paused = !protagonist.paused;
-        cursor.visible = protagonist.paused;
-        if protagonist.paused {
-            cursor.grab_mode = CursorGrabMode::None;
-        } else {
-            cursor.grab_mode = CursorGrabMode::Locked;
-        }
-    }
+    // enemy cube
+    cmds.spawn((
+        Mesh3d(meshes.add(Sphere::new(1.0))),
+        MeshMaterial3d(materials.add(Color::srgb_u8(0, 0, 0))),
+        Transform::from_xyz(0.0, 3.0, 0.0),
+        RigidBody::Dynamic,
+        Collider::cuboid(1.0, 1.0, 1.0),
+        Antagonist { detecting: true, goto: Vec3 { x: -10.0, y: 5.0, z: 0.0 } },
+    ));
 }
